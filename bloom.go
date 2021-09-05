@@ -57,15 +57,18 @@ import (
 	"math"
 
 	"github.com/bits-and-blooms/bitset"
+	"github.com/go-redis/redis/v7"
 )
 
 // A BloomFilter is a representation of a set of _n_ items, where the main
 // requirement is to make membership queries; _i.e._, whether an item is a
 // member of a set.
 type BloomFilter struct {
-	m uint
-	k uint
-	b *bitset.BitSet
+	m   uint
+	k   uint
+	b   *bitset.BitSet
+	r   *redis.Client
+	key string
 }
 
 func max(x, y uint) uint {
@@ -77,15 +80,15 @@ func max(x, y uint) uint {
 
 // New creates a new Bloom filter with _m_ bits and _k_ hashing functions
 // We force _m_ and _k_ to be at least one to avoid panics.
-func New(m uint, k uint) *BloomFilter {
-	return &BloomFilter{max(1, m), max(1, k), bitset.New(m)}
+func New(m uint, k uint, key string, r *redis.Client) *BloomFilter {
+	return &BloomFilter{max(1, m), max(1, k), bitset.New(m), r, key}
 }
 
 // From creates a new Bloom filter with len(_data_) * 64 bits and _k_ hashing
 // functions. The data slice is not going to be reset.
-func From(data []uint64, k uint) *BloomFilter {
+func From(data []uint64, k uint, key string, r *redis.Client) *BloomFilter {
 	m := uint(len(data) * 64)
-	return &BloomFilter{m, k, bitset.From(data)}
+	return &BloomFilter{m, k, bitset.From(data), r, key}
 }
 
 // baseHashes returns the four hash values of data that are used to create k
@@ -120,9 +123,9 @@ func EstimateParameters(n uint, p float64) (m uint, k uint) {
 
 // NewWithEstimates creates a new Bloom filter for about n items with fp
 // false positive rate
-func NewWithEstimates(n uint, fp float64) *BloomFilter {
+func NewWithEstimates(n uint, fp float64, key string, r *redis.Client) *BloomFilter {
 	m, k := EstimateParameters(n, fp)
-	return New(m, k)
+	return New(m, k, key, r)
 }
 
 // Cap returns the capacity, _m_, of a Bloom filter
@@ -161,7 +164,7 @@ func (f *BloomFilter) Merge(g *BloomFilter) error {
 
 // Copy creates a copy of a Bloom filter.
 func (f *BloomFilter) Copy() *BloomFilter {
-	fc := New(f.m, f.k)
+	fc := New(f.m, f.k,f.key, f.r)
 	fc.Merge(f) // #nosec
 	return fc
 }
@@ -355,3 +358,20 @@ func Locations(data []byte, k uint) []uint64 {
 
 	return locs
 }
+
+
+func (f *BloomFilter) SetToRedis(ii []uint)error{
+	for _, i := range ii {
+		if err:=f.r.SetBit(f.key, int64(i), 1).Err();err!=nil{
+			return err
+		}
+	}
+
+	return nil
+}
+
+func LoadFromRedis(keyPrefix string,r *redis.Client)[]*BloomFilter{
+
+}
+
+func
